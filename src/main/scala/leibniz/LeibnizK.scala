@@ -1,34 +1,30 @@
 package leibniz
 
 import LeibnizK.refl
-import cats.arrow.FunctionK
-import cats.~>
+
+//trait AnyKind
 
 /**
-  * The existence of a value of type `LeibnizK[A[_], B[_]]` implies that A ≡ B.
-  * For an explanation see [[Leibniz]].
+  * The existence of a value of type `LeibnizK[A, B]` implies that A ≡ B,
+  * regardless of the kind. For an explanation see [[Leibniz]].
   *
   * @see [[=~=]] `A =~= B` is a type synonym to `LeibnizK[A, B]`
   */
-sealed abstract class LeibnizK[A[_], B[_]] private[LeibnizK] () { ab =>
+sealed abstract class LeibnizK[A <: AnyKind, B <: AnyKind] private[LeibnizK] () { ab =>
   /**
-    * To create an instance of `LeibnizK[A[_], B[_]]` you must show that
-    * for every choice of `F[_[_]]` you can convert `F[A]` to `F[B]`.
+    * To create an instance of `LeibnizK[A, B]` you must show that
+    * for every choice of `F[_]` you can convert `F[A]` to `F[B]`.
     */
-  def subst[F[_[_]]](fa: F[A]): F[B]
-
-  def substK[F[_[_], _]]: F[A, ?] ~> F[B, ?] = {
-    type f[α[_]] = F[A, ?] ~> F[α, ?]
-    subst[f](FunctionK.id[F[A, ?]])
-  }
+  def subst[F[_ <: AnyKind]](fa: F[A]): F[B]
 
   /**
     * Substitution on identity brings about a direct coercion function.
     */
-  final def coerce: A ~> B = {
-    type f[α[_]] = A ~> α
-    subst[f](FunctionK.id[A])
-  }
+//  final def coerce(a: A)(implicit kind0: Kind0[A]): B = ???
+//  {
+//    type f[α[_]] = A ~> α
+//    subst[f](FunctionK.id[A])
+//  }
 
   /**
     * Equality is transitive relation and its witnesses can be composed
@@ -36,8 +32,8 @@ sealed abstract class LeibnizK[A[_], B[_]] private[LeibnizK] () { ab =>
     *
     * @see [[compose]]
     */
-  final def andThen[C[_]](bc: B =~= C): A =~= C = {
-    type f[α[_]] = A =~= α
+  final def andThen[C <: AnyKind](bc: B =~= C): A =~= C = {
+    type f[α <: AnyKind] = A =~= α
     bc.subst[f](ab)
   }
 
@@ -47,7 +43,7 @@ sealed abstract class LeibnizK[A[_], B[_]] private[LeibnizK] () { ab =>
     *
     * @see [[andThen]]
     */
-  final def compose[Z[_]](za: Z =~= A): Z =~= B =
+  final def compose[Z <: AnyKind](za: Z =~= A): Z =~= B =
     za.andThen(ab)
 
   /**
@@ -55,31 +51,8 @@ sealed abstract class LeibnizK[A[_], B[_]] private[LeibnizK] () { ab =>
     * Flipping is its own inverse, so `x.flip.flip == x`.
     */
   final def flip: B =~= A = {
-    type f[α[_]] = α =~= A
-    ab.subst[f](refl)
-  }
-
-  /**
-    * Given `A =~= B` we can prove that `F[A] === F[B]`.
-    *
-    * @see [[LeibnizK.lower]]
-    * @see [[LeibnizK.lower2]]
-    */
-  final def lower[F[_[_]]]: F[A] === F[B] =
-    LeibnizK.lower(ab)
-
-  /**
-    * Given `A =~= B` and `I =~= J` we can prove that `F[A, I] === F[B, J]`.
-    *
-    * @see [[LeibnizK.lower]]
-    * @see [[LeibnizK.lower2]]
-    * @see [[LeibnizK.lower3]]
-    */
-  final def lower2[F[_[_], _[_]]]: PartiallyAppliedLower2[F] =
-    new PartiallyAppliedLower2[F]
-  final class PartiallyAppliedLower2[F[_[_], _[_]]] {
-    def apply[I[_], J[_]](ij: I =~= J): F[A, I] === F[B, J] =
-      LeibnizK.lower2(ab, ij)
+    type f[α <: AnyKind] = α =~= A
+    ab.subst[f](refl[A])
   }
 
   /**
@@ -88,93 +61,34 @@ sealed abstract class LeibnizK[A[_], B[_]] private[LeibnizK] () { ab =>
     * @see [[LeibnizK.lift]]
     * @see [[LeibnizK.lift2]]
     */
-  final def lift[F[_[_], _]]: F[A, ?] =~= F[B, ?] =
+  final def lift[F[_ <: AnyKind] <: AnyKind]: F[A] =~= F[B] =
     LeibnizK.lift(ab)
 
-  /**
-    * Given `A =~= B` and `I =~= J` we can prove that
-    * `F[A, I, ?] =~= F[B, J, ?]`.
-    *
-    * @see [[LeibnizK.lift]]
-    * @see [[LeibnizK.lift2]]
-    * @see [[LeibnizK.lift3]]
-    */
-  final def lift2[F[_[_], _[_], _]]: PartiallyAppliedLift2[F] =
-    new PartiallyAppliedLift2[F]
-  final class PartiallyAppliedLift2[F[_[_], _[_], _]] {
-    def apply[I[_], J[_]](ij: I =~= J): F[A, I, ?] =~= F[B, J, ?] =
-      LeibnizK.lift2(ab, ij)
-  }
-
-  /**
-    * Given `A =~= B` we can convert `X ~> A` into `X ~> B`.
-    */
-  final def onF[X[_]](fa: X ~> A): X ~> B = {
-    type f[α[_]] = X ~> α
-    subst[f](fa)
-  }
+//  /**
+//    * Given `A =~= B` and `I =~= J` we can prove that
+//    * `F[A, I, ?] =~= F[B, J, ?]`.
+//    *
+//    * @see [[LeibnizK.lift]]
+//    * @see [[LeibnizK.lift2]]
+//    * @see [[LeibnizK.lift3]]
+//    */
+//  final def lift2[F[_[_], _[_], _]]: PartiallyAppliedLift2[F] =
+//    new PartiallyAppliedLift2[F]
+//  final class PartiallyAppliedLift2[F[_[_], _[_], _]] {
+//    def apply[I[_], J[_]](ij: I =~= J): F[A, I, ?] =~= F[B, J, ?] =
+//      LeibnizK.lift2(ab, ij)
+//  }
 }
 
 object LeibnizK {
-  private[this] final case class Refl[A[_]]() extends LeibnizK[A, A] {
-    def subst[F[_[_]]](fa: F[A]): F[A] = fa
+  private[this] final case class Refl[A <: AnyKind]() extends LeibnizK[A, A] {
+    def subst[F[_ <: AnyKind]](fa: F[A]): F[A] = fa
   }
-  private[this] val anyRefl: Any =~= Any = Refl[Any]()
-
-  /**
-    * Unsafe coercion between types. `unsafeForce` abuses `asInstanceOf` to
-    * explicitly coerce types. It is unsafe, but needed where Leibnizian
-    * equality isn't sufficient.
-    */
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-  def unsafeForce[A[_], B[_]]: A =~= B =
-    anyRefl.asInstanceOf[A =~= B]
 
   /**
     * Equality is reflexive relation.
     */
-  def refl[A[_]]: A =~= A = unsafeForce[A, A]
-
-  /**
-    * Given `A =~= B` we can prove that `F[A] === F[B]`.
-    *
-    * @see [[lift2]]
-    * @see [[lift3]]
-    */
-  def lower[F[_[_]], A[_], B[_]]
-  (ab: A =~= B): F[A] === F[B] = {
-    type f[α[_]] = F[A] === F[α]
-    ab.subst[f](Leibniz.refl)
-  }
-
-  /**
-    * Given `A =~= B` and `I =~= J` we can prove that
-    * `F[A, I] === F[B, J]`.
-    *
-    * @see [[lift]]
-    * @see [[lift3]]
-    */
-  def lower2[F[_[_], _[_]], A[_], B[_], I[_], J[_]]
-  (ab: A =~= B, ij: I =~= J): F[A, I] === F[B, J] = {
-    type f1[α[_]] = F[A, I] === F[α, I]
-    type f2[α[_]] = F[A, I] === F[B, α]
-    ij.subst[f2](ab.subst[f1](Leibniz.refl))
-  }
-
-  /**
-    * Given `A =~= B`, `I =~= J`, and `M =~= N` we can prove that
-    * `F[A, I] === F[B, J]`.
-    *
-    * @see [[lift]]
-    * @see [[lift2]]
-    */
-  def lower3[F[_[_], _[_], _[_]], A[_], B[_], I[_], J[_], M[_], N[_]]
-  (ab: A =~= B, ij: I =~= J, mn: M =~= N): F[A, I, M] === F[B, J, N] = {
-    type f1[α[_]] = F[A, I, M] === F[α, I, M]
-    type f2[α[_]] = F[A, I, M] === F[B, α, M]
-    type f3[α[_]] = F[A, I, M] === F[B, J, α]
-    mn.subst[f3](ij.subst[f2](ab.subst[f1](Leibniz.refl)))
-  }
+  def refl[A <: AnyKind]: A =~= A = Refl[A]()
 
   /**
     * Given `A =~= B` we can prove that `F[A, ?] =~= F[B, ?]`.
@@ -182,38 +96,38 @@ object LeibnizK {
     * @see [[lift2]]
     * @see [[lift3]]
     */
-  def lift[F[_[_], ?], A[_], B[_]]
-  (ab: A =~= B): F[A, ?] =~= F[B, ?] = {
-    type f[α[_]] = F[A, ?] =~= F[α, ?]
-    ab.subst[f](refl[F[A, ?]])
+  def lift[F[_ <: AnyKind] <: AnyKind, A <: AnyKind, B <: AnyKind]
+  (ab: A =~= B): F[A] =~= F[B] = {
+    type f[α <: AnyKind] = F[A] =~= F[α]
+    ab.subst[f](refl[F[A]])
   }
 
-  /**
-    * Given `A =~= B` and `I =~= J` we can prove that
-    * `F[A, I, ?] =~= F[B, J, ?]`.
-    *
-    * @see [[lift]]
-    * @see [[lift3]]
-    */
-  def lift2[F[_[_], _[_], _], A[_], B[_], I[_], J[_]]
-  (ab: A =~= B, ij: I =~= J): F[A, I, ?] =~= F[B, J, ?] = {
-    type f1[α[_]] = F[A, I, ?] =~= F[α, I, ?]
-    type f2[α[_]] = F[A, I, ?] =~= F[B, α, ?]
-    ij.subst[f2](ab.subst[f1](refl[F[A, I, ?]]))
-  }
-
-  /**
-    * Given `A =~= B`, `I =~= J`, and `M =~= N` we can prove that
-    * `F[A, I, ?] =~= F[B, J, ?]`.
-    *
-    * @see [[lift]]
-    * @see [[lift2]]
-    */
-  def lift3[F[_[_], _[_], _[_], _], A[_], B[_], I[_], J[_], M[_], N[_]]
-  (ab: A =~= B, ij: I =~= J, mn: M =~= N): F[A, I, M, ?] =~= F[B, J, N, ?] = {
-    type f1[α[_]] = F[A, I, M, ?] =~= F[α, I, M, ?]
-    type f2[α[_]] = F[A, I, M, ?] =~= F[B, α, M, ?]
-    type f3[α[_]] = F[A, I, M, ?] =~= F[B, J, α, ?]
-    mn.subst[f3](ij.subst[f2](ab.subst[f1](refl[F[A, I, M, ?]])))
-  }
+//  /**
+//    * Given `A =~= B` and `I =~= J` we can prove that
+//    * `F[A, I, ?] =~= F[B, J, ?]`.
+//    *
+//    * @see [[lift]]
+//    * @see [[lift3]]
+//    */
+//  def lift2[F[_[_], _[_], _], A[_], B[_], I[_], J[_]]
+//  (ab: A =~= B, ij: I =~= J): F[A, I, ?] =~= F[B, J, ?] = {
+//    type f1[α[_]] = F[A, I, ?] =~= F[α, I, ?]
+//    type f2[α[_]] = F[A, I, ?] =~= F[B, α, ?]
+//    ij.subst[f2](ab.subst[f1](refl[F[A, I, ?]]))
+//  }
+//
+//  /**
+//    * Given `A =~= B`, `I =~= J`, and `M =~= N` we can prove that
+//    * `F[A, I, ?] =~= F[B, J, ?]`.
+//    *
+//    * @see [[lift]]
+//    * @see [[lift2]]
+//    */
+//  def lift3[F[_[_], _[_], _[_], _], A[_], B[_], I[_], J[_], M[_], N[_]]
+//  (ab: A =~= B, ij: I =~= J, mn: M =~= N): F[A, I, M, ?] =~= F[B, J, N, ?] = {
+//    type f1[α[_]] = F[A, I, M, ?] =~= F[α, I, M, ?]
+//    type f2[α[_]] = F[A, I, M, ?] =~= F[B, α, M, ?]
+//    type f3[α[_]] = F[A, I, M, ?] =~= F[B, J, α, ?]
+//    mn.subst[f3](ij.subst[f2](ab.subst[f1](refl[F[A, I, M, ?]])))
+//  }
 }
